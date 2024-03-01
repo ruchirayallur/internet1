@@ -1,0 +1,576 @@
+import tkinter as tk
+from tkinter import messagebox, simpledialog
+import random
+import time
+import hashlib
+import sqlite3
+import numpy as np
+
+class QLearningAgent:
+    def __init__(self, actions, learning_rate=0.1, discount_factor=0.9, exploration_rate=0.1):
+        self.actions = actions
+        self.learning_rate = learning_rate
+        self.discount_factor = discount_factor
+        self.exploration_rate = exploration_rate
+        self.q_table = {}
+
+    def choose_action(self, state):
+        if random.uniform(0, 1) < self.exploration_rate:
+            return random.choice(self.actions)
+        else:
+            return max(self.actions, key=lambda action: self.get_q_value(state, action))
+
+    def get_q_value(self, state, action):
+        return self.q_table.get((state, action), 0)
+
+    def update_q_value(self, state, action, reward, next_state):
+        old_q_value = self.get_q_value(state, action)
+        max_next_q_value = max([self.get_q_value(next_state, next_action) for next_action in self.actions])
+        new_q_value = (1 - self.learning_rate) * old_q_value + self.learning_rate * (reward + self.discount_factor * max_next_q_value)
+        self.q_table[(state, action)] = new_q_value
+
+class SudokuSolver:
+
+    def __init__(self, grid):
+        self.grid = grid
+
+    def is_valid(self, row, col, num):
+        if num in self.grid[row]:
+            return False
+        if num in [self.grid[i][col] for i in range(9)]:
+            return False
+        start_row, start_col = 3 * (row // 3), 3 * (col // 3)
+        for i in range(start_row, start_row + 3):
+            for j in range(start_col, start_col + 3):
+                if self.grid[i][j] == num:
+                    return False
+        return True
+
+    def solve(self):
+        empty_cell = self.find_empty()
+        if not empty_cell:
+            return True
+        row, col = empty_cell
+        for num in range(1, 10):
+            if self.is_valid(row, col, num):
+                self.grid[row][col] = num
+                if self.solve():
+                    return True
+                self.grid[row][col] = 0
+        return False
+
+    def find_empty(self):
+        for i in range(9):
+            for j in range(9):
+                if self.grid[i][j] == 0:
+                    return (i, j)
+        return None
+
+class SudokuGame:
+
+    def __init__(self, master):
+        self.master = master
+        self.levels = 10
+        self.current_level = 1
+        self.grid = [[0] * 9 for _ in range(9)]
+        self.solution = [[0] * 9 for _ in range(9)]  # Store the solution for comparison
+        self.points = 0  # Initialize points
+        self.generate()
+        self.q_agent = QLearningAgent(actions=[(row, col, num) for row in range(9) for col in range(9) for num in range(1, 10)])
+
+    def generate(self):
+        solver = SudokuSolver(self.grid)
+        solver.solve()
+        self.solution = [row[:] for row in self.grid]  # Copy the solution
+        for _ in range(30):
+            row, col = random.randint(0, 8), random.randint(0, 8)
+            self.grid[row][col] = 0
+
+    def hint(self):
+        solver = SudokuSolver(self.grid)
+        empty_cell = solver.find_empty()
+        if empty_cell:
+            row, col = empty_cell
+            for num in range(1, 10):
+                if solver.is_valid(row, col, num):
+                    return (row, col, num)
+        return None
+
+    def level_complete(self):
+      # Check if the current level is less than the total levels
+      if self.current_level < self.levels:
+          # Check if the grid is fully filled with valid numbers
+          if self.is_grid_filled() and self.is_valid_grid():
+              # If the conditions are met, advance to the next level
+              self.current_level += 1
+              self.generate()  # Generate a new Sudoku grid for the next level
+              messagebox.showinfo("Congratulations!", f"Level {self.current_level} Completed!\nYou've unlocked Level {self.current_level + 1}!")
+              return True
+      else:
+          # Player has completed all levels
+          self.points += 200  # Additional points for completing all levels
+          messagebox.showinfo("Congratulations!", f"You've completed all levels!\nTotal Points: {self.points}")
+          return True  # Assuming you want to return True when all levels are completed
+      return False  # Return False if the conditions are not met
+
+    def is_grid_filled(self):
+      # Check if all cells in the grid are filled (no zeros)
+      for row in self.grid:
+          if 0 in row:
+              return False
+      return True
+
+    def is_valid_grid(self):
+      # Validate the entire Sudoku grid
+      solver = SudokuSolver(self.grid)
+      return solver.solve()  # If the solver can solve the grid, it's valid
+
+    def add_points(self, points):
+        self.points += points
+        self.update_points_display()  # Update points display on GUI
+      
+    def update_points_display(self):
+        
+        def increase_points(self):
+             self.points += 10
+        
+    def increase_difficulty(self):
+  
+      for i in range(9):
+         for j in range(9):
+             if self.grid[i][j] > 0:  # Check if the cell is prefilled
+                 self.grid[i][j] = 0 if self.grid[i][j] == None else max(0, self.grid[i][j] - 1)  # Allow decreasing the prefilled numbers unless it's already 0 or None
+      pass
+    def select_best_move(self):
+      empty_cells = [(row, col) for row in range(9) for col in range(9) if self.grid[row][col] == 0]
+      if empty_cells:
+          best_move = max([(cell, self.q_agent.get_q_value(cell, 0)) for cell in empty_cells], key=lambda x: x[1])[0]
+          return best_move[0], best_move[1]
+      return None
+
+    def player_performance_update(self, elapsed_time, mistakes):
+      # Update Q-learning agent's parameters based on player's performance
+      average_time = elapsed_time / 81  # Average time per move
+      reward = max(0, (1 - mistakes / 81))  # Reward based on number of mistakes
+      self.q_agent.learning_rate = max(0.01, min(0.5, 1 - average_time / 20))  # Dynamic learning rate
+      self.q_agent.exploration_rate = max(0.01, min(0.5, 1 - average_time / 20))  # Dynamic exploration rate
+
+class SudokuGUI:
+
+    def __init__(self, master, username=None):
+        self.master = master
+        self.username = username
+        self.master.title("SUDOKU GAME")
+        self.master.geometry("500x400")
+        self.master.configure(bg="#5b083b")
+            # Pass master to SudokuGame constructor
+        self.game = SudokuGame(master)
+        self.create_widgets()
+        self.points_label = tk.Label(self.master, text=f"Points: {self.game.points}", font=("Arial", 12), bg="#add8e6")
+        self.points_label.grid(row=0, column=1, padx=10, pady=10)
+        self.timer_label = tk.Label(self.master, text="Timer: 00:00", font=("Arial", 12), bg="#add8e6")
+        self.timer_label.grid(row=0, column=2, padx=10, pady=5)
+        self.timer_running = False
+        self.timer_start_time = None
+        self.timer_update_id = None 
+        self.update_timer()
+        if username:
+           self.display_username(username)
+
+    def create_widgets(self):
+        title_label = tk.Label(self.master,
+                               text="LET'S HAVE FUN!",
+                               font=("Arial", 12, "bold", "italic"),
+                               bg="#add8e6")  # Set background color
+        title_label.grid(row=0, column=0, columnspan=3, pady=10)
+
+        self.board_frame = tk.Frame(
+            self.master, bg="#ffffcc", bd=2,
+            relief="sunken")  # Add border and background color
+        self.board_frame.grid(row=1, column=0, padx=10, pady=10)
+
+        self.buttons = []
+        for i in range(9):
+            row_buttons = []
+            for j in range(9):
+                cell_value = self.game.grid[i][j]
+                if cell_value == 0:
+                    button = tk.Button(self.board_frame,
+                                       text="",
+                                       width=2,
+                                       height=1,
+                                       command=lambda i=i, j=j: self.make_move(i, j),
+                                       bg="black",
+                                       fg="white",
+                                       font=("Arial", 12))
+                else:
+                    button = tk.Button(self.board_frame,
+                                       text=str(cell_value),
+                                       width=2,
+                                       height=1,
+                                       state="disabled",
+                                       bg="white",
+                                       fg="black",  # Set text color to black
+                                       font=("Arial", 12))
+                button.grid(row=i, column=j, padx=1, pady=1)
+                row_buttons.append(button)
+            self.buttons.append(row_buttons)
+
+        options_frame = tk.Frame(self.master, bg="#add8e6")
+        options_frame.grid(row=1, column=1, padx=10)
+
+        undo_button = tk.Button(options_frame,
+                                text="Undo",
+                                command=self.undo,
+                                bg="#4caf50",
+                                fg="black",
+                                font=("Arial", 12),
+                                relief="raised",
+                                bd=2)
+        undo_button.grid(row=0, column=0, padx=10, pady=5, sticky="ew")
+
+        erase_button = tk.Button(options_frame,
+                                 text="Erase",
+                                 command=self.erase,
+                                 bg="#ff5722",
+                                 fg="black",
+                                 font=("Arial", 12),
+                                 relief="raised",
+                                 bd=2)
+        erase_button.grid(row=1, column=0, padx=10, pady=5, sticky="ew")
+
+        hint_button = tk.Button(options_frame,
+                                text="Hint",
+                                command=self.show_hint,
+                                bg="#2196f3",
+                                fg="black",
+                                font=("Arial", 12),
+                                relief="raised",
+                                bd=2)
+        hint_button.grid(row=2, column=0, padx=10, pady=5, sticky="ew")
+
+        refresh_button = tk.Button(options_frame,
+                                   text="Refresh",
+                                   command=self.refresh_board,
+                                   bg="#ff9800",
+                                   fg="black",
+                                   font=("Arial", 12),
+                                   relief="raised",
+                                   bd=2)
+        refresh_button.grid(row=3, column=0, padx=10, pady=5, sticky="ew")
+
+        rules_button = tk.Button(options_frame,
+                                 text="Rules",
+                                 command=self.show_rules,
+                                 bg="#9722c5",
+                                 fg="black",
+                                 font=("Arial", 12),
+                                 relief="raised",
+                                 bd=2)
+        rules_button.grid(row=4, column=0, padx=10, pady=5, sticky="ew")
+
+        pause_button = tk.Button(options_frame,
+                           text="Pause",
+                           command=self.pause_game,
+                           bg="#ff0000",  # Red color for pause
+                           fg="black",
+                           font=("Arial", 12),
+                           relief="raised",
+                           bd=2)
+        pause_button.grid(row=5, column=0, padx=10, pady=5, sticky="ew")
+
+        resume_button = tk.Button(options_frame,
+                            text="Resume",
+                            command=self.resume_game,
+                            bg="#00ff00",  # Green color for resume
+                            fg="black",
+                            font=("Arial", 12),
+                            relief="raised",
+                            bd=2)
+        resume_button.grid(row=6, column=0, padx=10, pady=5, sticky="ew")
+      
+    def show_rules(self):
+        rules = """
+        Rules of Sudoku:
+        1. Fill each row with numbers from 1 to 9, without repeating any                 number within the row.
+        2. Fill each column with numbers from 1 to 9, without repeating any              number within the column.
+        3. Fill each 3x3 subgrid with numbers from 1 to 9, without repeating             any number within the subgrid.
+        """
+        messagebox.showinfo("Rules", rules)
+
+    def make_move(self, row, col):
+              value = simpledialog.askinteger(
+                  "Input",
+                  f"Enter number for cell ({row + 1}, {col + 1}):",
+                  parent=self.master,
+                  minvalue=1,
+                  maxvalue=9)
+              if value is not None:
+                  if value == self.game.solution[row][col]:
+                      self.game.add_points(10)  # Increase points by 10 for correct number entry
+                  else:
+                      self.game.add_points(-5)  # Decrease points by 5 for incorrect number entry
+
+                  self.game.grid[row][col] = value
+                  self.buttons[row][col].config(
+                      text=str(value),
+                      bg="#64b5f6" if value == self.game.solution[row][col] else "#ff8a65")
+                  if self.is_game_complete():
+                      self.pause_timer()
+                      self.game.level_complete()
+
+
+    def is_game_complete(self):
+      for row in self.game.grid:
+          if 0 in row:
+              return False
+      return True
+
+    def pause_game_timer(self):
+      self.master.after_cancel(self.timer_update_id)  # Pause the timer update
+
+    def pause_game(self):
+        self.pause_timer()
+        messagebox.showinfo("Paused", "Game Paused")
+      
+    def resume_game(self):
+        self.resume_timer()
+        messagebox.showinfo("Resumed", "Game Resumed")
+
+    def undo(self):
+        # Implement undo functionality
+        pass
+
+    def erase(self):
+        # Implement erase functionality
+        pass
+
+    def show_hint(self):
+        hint = self.game.hint()
+        if hint:
+            row, col, num = hint
+            messagebox.showinfo("Hint",
+                                f"Try filling cell ({row + 1}, {col + 1}) with {num}.")
+            self.game.add_points(-5)  # Reduce points when using the hint
+            self.update_points_display()  # Update points display in GUI
+        else:
+            messagebox.showinfo("Hint", "No hint available.")
+
+    def refresh_board(self):
+        self.game.generate()
+        for i in range(9):
+            for j in range(9):
+                cell_value = self.game.grid[i][j]
+                if cell_value == 0:
+                    self.buttons[i][j].config(text="", state="active",bg="black", fg="white")
+                else:
+                    self.buttons[i][j].config(text=str(cell_value), state="disabled", bg="white", fg="black")
+
+    def display_username(self, username):
+      username_label = tk.Label(self.master, text=f"Logged in as: {username}", font=("Arial", 12), bg="#add8e6")
+      username_label.grid(row=0, column=2, padx=10, pady=10)
+
+    def start_game(self, username=None):
+         if username:
+             self.display_username(username)
+             self.start_timer()  # Start timer for the game
+             self.master.mainloop()
+         else:
+             self.master.mainloop()
+
+    def update_points_display(self):
+        self.points_label.config(text=f"Points: {self.game.points}")
+
+    def start_timer(self):
+        self.timer_start_time = time.time()
+        self.timer_running = True
+        self.update_timer()
+    
+    def update_timer(self):
+        if self.timer_running:
+           elapsed_time = time.time() - self.timer_start_time
+           minutes = int(elapsed_time // 60)
+           seconds = int(elapsed_time % 60)
+           self.timer_label.config(text=f"Timer: {minutes:02d}:{seconds:02d}")
+           self.timer_label.after(1000, self.update_timer)  # Schedule the update after 1 second
+
+    def pause_timer(self):
+        self.timer_running = False
+        self.timer_pause_time = time.time()
+
+    def resume_timer(self):
+      self.timer_running = True
+      if self.timer_start_time is not None:
+          elapsed_time = time.time() - (self.timer_pause_time - self.timer_start_time)
+          minutes = int(elapsed_time // 60)
+          seconds = int(elapsed_time % 60)
+          self.timer_label.config(text=f"Timer: {minutes:02d}:{seconds:02d}")
+      else:
+          self.start_timer()
+
+    def reset_timer(self):
+       self.timer_start_time = None
+       self.timer_running = False
+       self.timer_label.config(text="Timer: 00:00")
+
+class HomePage:
+
+    def __init__(self, master):
+        self.master = master
+        self.master.title("SUDOKU GAME - Home Page")
+        self.master.geometry("400x400")  # Set window size
+        self.master.configure(bg="#003050")  # Set background color
+        self.create_widgets()
+        self.create_users_table()  # Create users table when the application starts
+
+    def create_users_table(self):
+        # Connect to the database and create the users table
+        conn = sqlite3.connect("users.db")
+        c = conn.cursor()
+        c.execute('''CREATE TABLE IF NOT EXISTS users
+                     (username TEXT PRIMARY KEY, password TEXT)''')
+        conn.commit()
+        conn.close()
+
+    def create_widgets(self):
+        title_label = tk.Label(self.master,
+                               text="Welcome To Sudoku Game \N{grinning face with smiling eyes}",
+                               font=("Arial", 20, "bold", "italic"),
+                               bg="#add9e6")  # Set background color
+        title_label.pack(pady=20)
+
+        login_button = tk.Button(self.master,
+                                 text="Login",
+                                 command=self.show_login,
+                                 font=("Arial", 12),
+                                 bg="#add3e6",  # Set button color
+                                 fg="black")  # Set text color
+        login_button.pack(pady=10)
+
+        signup_button = tk.Button(self.master,
+                                  text="Sign Up",
+                                  command=self.show_signup,
+                                  font=("Arial", 12,),
+                                  bg="#add3e6",  # Set button color
+                                  fg="black")  # Set text color
+        signup_button.pack(pady=10)
+
+        play_as_guest_button = tk.Button(self.master,
+                                         text="Play as Guest",
+                                         command=self.play_as_guest,
+                                         font=("Arial", 12,),
+                                         bg="#add3e6",  # Set button color
+                                         fg="black")  # Set text color
+        play_as_guest_button.pack(pady=10)
+
+    def show_login(self):
+        login_window = tk.Toplevel(self.master)
+        login_window.title("Login")
+        login_window.geometry("300x200")
+        login_window.configure(bg="#add8e6")
+
+        username_label = tk.Label(login_window, text="Username:", font=("Arial", 12), bg="#add8e6")
+        username_label.grid(row=0, column=0, padx=10, pady=10)
+
+        username_entry = tk.Entry(login_window, font=("Arial", 12))
+        username_entry.grid(row=0, column=1, padx=10, pady=10)
+
+        password_label = tk.Label(login_window, text="Password:", font=("Arial", 12), bg="#add8e6")
+        password_label.grid(row=1, column=0, padx=10, pady=10)
+
+        password_entry = tk.Entry(login_window, show="*", font=("Arial", 12))
+        password_entry.grid(row=1, column=1, padx=10, pady=10)
+
+        login_button = tk.Button(login_window, text="Login", command=lambda: self.authenticate(login_window, username_entry.get(), password_entry.get()), font=("Arial", 12), bg="#008080", fg="white")
+        login_button.grid(row=2, column=0, columnspan=2, padx=10, pady=10)
+      
+    def show_timer_option(self, login_window, username, password):
+        login_window.destroy()  # Destroy the login window
+        timer_option_window = tk.Toplevel(self.master)
+        timer_option_window.title("Timer Option")
+        timer_option_window.geometry("300x200")
+        timer_option_window.configure(bg="#add8e6")
+
+        with_timer_button = tk.Button(timer_option_window, text="Start with Timer", command=lambda: self.start_game(username), font=("Arial", 12), bg="#008080", fg="white")
+        with_timer_button.grid(row=0, column=0, padx=10, pady=10)
+
+        without_timer_button = tk.Button(timer_option_window, text="Start without Timer", command=lambda: self.start_game(username, timer=False), font=("Arial", 12), bg="#008080", fg="white")
+        without_timer_button.grid(row=1, column=0, padx=10, pady=10)
+
+    def show_signup(self):
+        signup_window = tk.Toplevel(self.master)
+        signup_window.title("Sign Up")
+        signup_window.geometry("300x200")
+        signup_window.configure(bg="#add8e6")
+
+        username_label = tk.Label(signup_window, text="Username:", font=("Arial", 12), bg="#add8e6")
+        username_label.grid(row=0, column=0, padx=10, pady=10)
+
+        username_entry = tk.Entry(signup_window, font=("Arial", 12))
+        username_entry.grid(row=0, column=1, padx=10, pady=10)
+
+        password_label = tk.Label(signup_window, text="Password:", font=("Arial", 12), bg="#add8e6")
+        password_label.grid(row=1, column=0, padx=10, pady=10)
+
+        password_entry = tk.Entry(signup_window, show="*", font=("Arial", 12))
+        password_entry.grid(row=1, column=1, padx=10, pady=10)
+
+        signup_button = tk.Button(signup_window, text="Sign Up", command=lambda: self.signup(signup_window, username_entry.get(), password_entry.get()), font=("Arial", 12), bg="#008080", fg="white")
+        signup_button.grid(row=2, column=0, columnspan=2, padx=10, pady=10)
+
+    def authenticate(self, login_window, username, password):
+        # Implement authentication logic here
+        conn = sqlite3.connect("users.db")
+        c = conn.cursor()
+        c.execute("SELECT * FROM users WHERE username=? AND password=?", (username, hashlib.sha256(password.encode()).hexdigest()))
+        user = c.fetchone()
+        conn.close()
+        if user:
+            messagebox.showinfo("Login", "Login successful!")
+            login_window.destroy()
+            self.start_game(username)
+        else:
+            messagebox.showerror("Login Error", "Invalid username or password.")
+
+    def signup(self, signup_window, username, password):
+        # Implement sign-up logic here
+        conn = sqlite3.connect("users.db")
+        c = conn.cursor()
+        c.execute("SELECT * FROM users WHERE username=?", (username,))
+        if c.fetchone():
+            messagebox.showerror("Sign Up Error", "Username already exists. Please choose another username.")
+        else:
+            c.execute("INSERT INTO users VALUES (?, ?)", (username, hashlib.sha256(password.encode()).hexdigest()))
+            conn.commit()
+            conn.close()
+            messagebox.showinfo("Sign Up", "Sign Up successful! You can now login.")
+            signup_window.destroy()
+
+    def play_as_guest(self):
+        self.master.destroy()  # Destroy the home page window
+        root = tk.Tk()  # Create a new Tkinter window
+        app = SudokuGUI(root)  # Initialize the Sudoku game GUI
+        app.start_game()  # Start the game
+        root.mainloop()  # Run the Tkinter event loop
+
+    def generate_player_id(self):
+        # Generate random player ID
+        return ''.join(random.choices('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', k=6))
+
+    def start_game(self, username=None):
+                if username:
+                    self.master.destroy()
+                    root = tk.Tk()
+                    app = SudokuGUI(root, username=username)
+                    app.start_game()  # Start the game
+                    root.mainloop()
+                    # After the game window closes, return to the home page
+                    self.master.deiconify()  # Restore the home page window
+
+def main():
+  root = tk.Tk()
+  app = HomePage(root)
+  root.mainloop()
+
+if __name__ == "__main__":
+  main()
