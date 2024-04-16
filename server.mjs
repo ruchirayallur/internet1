@@ -13,7 +13,7 @@ const server = createServer( async (req, res) => {
       res.setHeader('Access-Control-Allow-Origin', "*");
 
 
-      res.end("Mithilesh");
+      res.end("Ruchira ");
       // console.log(res)
     }
     if(req.method == 'OPTIONS') {
@@ -21,7 +21,11 @@ const server = createServer( async (req, res) => {
       res.setHeader('Content-Type', 'appliction/json');
       res.setHeader('Access-Control-Allow-Origin', 'http://127.0.0.1:5500');
       res.setHeader('Access-Control-Allow-Methods', "POST, GET, OPTIONS");
-      res.setHeader('Access-Control-Allow-Headers', '*');
+      res.setHeader('Access-Control-Allow-Headers', '*'); 
+
+
+
+
       res.end('OK');
     }
     if(req.method == 'POST') {
