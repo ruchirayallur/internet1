@@ -17,7 +17,7 @@ const logIn = async () => {
         })
     })
     // console.log(res);
-    if(!res.ok) {
+    if(!res.ok) { 
         alert('Failed to login');
         return;
     }
